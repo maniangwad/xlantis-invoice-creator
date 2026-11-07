@@ -1,0 +1,1084 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XLANTIS CUSTOMS | Invoice Manager</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+:root {
+    --bg:#10141d;
+    --panel:#191f2b;
+    --panel2:#202938;
+    --blue:#1685ff;
+    --text:#edf3ff;
+    --muted:#9ba9bd;
+    --border:#303b4d;
+    --green:#35c98b;
+    --red:#ff6474;
+}
+* {box-sizing:border-box}
+body {
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:Arial,sans-serif;
+}
+button,input,select,textarea {font:inherit}
+button {
+    cursor:pointer;
+    border:0;
+    border-radius:8px;
+    padding:11px 16px;
+    font-weight:700;
+}
+.primary {background:var(--blue);color:white}
+.secondary {background:var(--panel2);color:white;border:1px solid var(--border)}
+.danger {background:#532630;color:#ffb9c1}
+.hidden {display:none!important}
+.muted {color:var(--muted)}
+.small {font-size:12px}
+#loginScreen {
+    min-height:100vh;
+    display:grid;
+    place-items:center;
+    padding:20px;
+}
+.login-card {
+    width:min(420px,100%);
+    background:var(--panel);
+    padding:32px;
+    border:1px solid var(--border);
+    border-radius:16px;
+}
+.logo {font-size:23px;font-weight:900;letter-spacing:1px}
+.logo span {color:var(--blue)}
+input,select,textarea {
+    width:100%;
+    background:#111823;
+    color:white;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:12px;
+    margin-top:7px;
+    outline:none;
+}
+input:focus,select:focus,textarea:focus {border-color:var(--blue)}
+label {display:block;font-size:13px;color:var(--muted);margin-top:15px}
+#app {min-height:100vh}
+header {
+    height:70px;
+    padding:0 28px;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:#151b26;
+}
+.layout {display:flex;min-height:calc(100vh - 70px)}
+aside {
+    width:230px;
+    padding:22px 14px;
+    border-right:1px solid var(--border);
+    background:#151b26;
+}
+.nav {
+    display:block;
+    width:100%;
+    text-align:left;
+    margin:5px 0;
+    background:transparent;
+    color:var(--muted);
+}
+.nav.active,.nav:hover {background:#202d40;color:white}
+main {flex:1;padding:28px;min-width:0}
+.page {display:none}
+.page.active {display:block}
+h1 {font-size:26px;margin:0 0 8px}
+h2 {font-size:19px;margin:0 0 16px}
+.cards {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:15px;
+    margin:24px 0;
+}
+.card,.panel {
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:20px;
+}
+.metric {font-size:26px;font-weight:800;margin-top:10px}
+.form-grid {
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:0 16px;
+}
+.full {grid-column:1/-1}
+.row {display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.between {justify-content:space-between}
+.actions {display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}
+table {width:100%;border-collapse:collapse;min-width:650px}
+th,td {padding:13px;text-align:left;border-bottom:1px solid var(--border);font-size:13px}
+th {color:var(--muted)}
+.table-wrap {overflow-x:auto}
+.status {padding:5px 9px;border-radius:20px;background:#493d20;color:#ffdc80;font-size:11px}
+.status.paid {background:#173f34;color:#70e4b2}
+#message {margin-top:15px;font-size:13px;color:var(--green);white-space:pre-wrap}
+.item-row {
+    display:grid;
+    grid-template-columns:2fr 90px 120px 40px;
+    gap:8px;
+    align-items:end;
+    margin:10px 0;
+}
+.item-row input {margin:0}
+.remove-item {background:#532630;color:#ffb9c1;padding:10px}
+.preview {
+    background:white;
+    color:#18263a;
+    padding:22px;
+    border-radius:8px;
+    margin-top:15px;
+}
+#backgroundPreview {
+    max-width:180px;
+    max-height:110px;
+    display:none;
+    margin-top:12px;
+    border-radius:8px;
+    border:1px solid var(--border);
+}
+@media(max-width:750px) {
+    .layout {display:block}
+    aside {width:100%;display:flex;overflow-x:auto;padding:8px}
+    .nav {white-space:nowrap;width:auto}
+    main {padding:17px}
+    header {padding:0 15px}
+    .form-grid {grid-template-columns:1fr}
+    .full {grid-column:auto}
+    .item-row {grid-template-columns:1fr 65px 90px 38px}
+}
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<section id="loginScreen">
+    <div class="login-card">
+        <div class="logo">⚡ XLANTIS <span>CUSTOMS</span></div>
+        <p class="muted">Invoice Management System</p>
+
+        <label>Email address</label>
+        <input id="loginEmail" type="email" placeholder="Admin email">
+
+        <label>Password</label>
+        <input id="loginPassword" type="password" placeholder="Password">
+
+        <button class="primary" style="width:100%;margin-top:20px"
+            onclick="login()">Sign In</button>
+
+        <div id="loginMessage"></div>
+    </div>
+</section>
+
+<!-- APPLICATION -->
+<div id="app" class="hidden">
+    <header>
+        <div class="logo">⚡ XLANTIS <span>CUSTOMS</span></div>
+        <div class="row">
+            <span class="muted small" id="adminEmail"></span>
+            <button class="secondary" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="layout">
+        <aside>
+            <button class="nav active" data-page="dashboard" onclick="showPage('dashboard',this)">▦ Dashboard</button>
+            <button class="nav" data-page="create" onclick="showPage('create',this)">＋ Create Invoice</button>
+            <button class="nav" data-page="history" onclick="showPage('history',this)">▤ Invoice History</button>
+            <button class="nav" data-page="backgrounds" onclick="showPage('backgrounds',this)">▧ Backgrounds</button>
+        </aside>
+
+        <main>
+            <!-- DASHBOARD -->
+            <section id="dashboard" class="page active">
+                <h1>Dashboard</h1>
+                <p class="muted">XLANTIS CUSTOMS invoice overview</p>
+
+                <div class="cards">
+                    <div class="card">
+                        <div class="muted">Total Invoices</div>
+                        <div class="metric" id="metricInvoices">0</div>
+                    </div>
+                    <div class="card">
+                        <div class="muted">Total Revenue</div>
+                        <div class="metric" id="metricRevenue">₹0</div>
+                    </div>
+                    <div class="card">
+                        <div class="muted">Outstanding</div>
+                        <div class="metric" id="metricOutstanding">₹0</div>
+                    </div>
+                    <div class="card">
+                        <div class="muted">Pending Invoices</div>
+                        <div class="metric" id="metricPending">0</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h2>Recent invoices</h2>
+                    <div class="table-wrap" id="recentInvoices"></div>
+                </div>
+            </section>
+
+            <!-- CREATE INVOICE -->
+            <section id="create" class="page">
+                <h1>Create Invoice</h1>
+                <p class="muted">Create a new XLANTIS CUSTOMS invoice.</p>
+
+                <div class="panel">
+                    <h2>Customer details</h2>
+                    <div class="form-grid">
+                        <div>
+                            <label>Customer name *</label>
+                            <input id="customerName" placeholder="Customer name">
+                        </div>
+                        <div>
+                            <label>Customer phone</label>
+                            <input id="customerPhone" placeholder="Phone number">
+                        </div>
+                        <div>
+                            <label>Customer email</label>
+                            <input id="customerEmail" type="email" placeholder="Email">
+                        </div>
+                        <div>
+                            <label>Vehicle name</label>
+                            <input id="vehicleName" placeholder="Vehicle name">
+                        </div>
+                        <div>
+                            <label>Vehicle number / plate</label>
+                            <input id="vehicleNumber" placeholder="Vehicle number">
+                        </div>
+                        <div>
+                            <label>Invoice date</label>
+                            <input id="invoiceDate" type="date">
+                        </div>
+                        <div>
+                            <label>Due date</label>
+                            <input id="dueDate" type="date">
+                        </div>
+                        <div>
+                            <label>Payment method</label>
+                            <select id="paymentMethod">
+                                <option>UPI</option>
+                                <option>Bank Transfer</option>
+                                <option>Cash</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" style="margin-top:18px">
+                    <div class="row between">
+                        <h2>Services and pricing</h2>
+                        <button class="secondary" onclick="addItem()">＋ Add service</button>
+                    </div>
+                    <div id="items"></div>
+                    <div style="text-align:right;margin-top:20px">
+                        <div class="muted">Subtotal</div>
+                        <div class="metric" id="subtotal">₹0.00</div>
+                        <label style="max-width:180px;margin-left:auto">Tax / extra charges (₹)
+                            <input id="tax" type="number" min="0" value="0" oninput="calculateTotal()">
+                        </label>
+                        <div class="metric" id="grandTotal">₹0.00</div>
+                    </div>
+                </div>
+
+                <div class="panel" style="margin-top:18px">
+                    <h2>Invoice background</h2>
+                    <label>Choose a saved background</label>
+                    <select id="savedBackground" onchange="selectSavedBackground()">
+                        <option value="">No background</option>
+                    </select>
+
+                    <label>Or upload a custom background</label>
+                    <input id="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
+                    <img id="backgroundPreview" alt="Background preview">
+
+                    <label class="row" style="gap:8px">
+                        <input id="saveBackground" type="checkbox" style="width:auto">
+                        Save this background for future invoices
+                    </label>
+
+                    <label>Background opacity</label>
+                    <input id="backgroundOpacity" type="range" min="10" max="100" value="25">
+                </div>
+
+                <div class="panel" style="margin-top:18px">
+                    <h2>Additional information</h2>
+                    <label>Notes</label>
+                    <textarea id="invoiceNotes" rows="3" placeholder="Payment terms or additional notes"></textarea>
+                    <div class="actions">
+                        <button class="primary" onclick="createInvoice()">Save Invoice & Generate PDF</button>
+                        <button class="secondary" onclick="resetForm()">Reset</button>
+                    </div>
+                    <div id="message"></div>
+                </div>
+            </section>
+
+            <!-- HISTORY -->
+            <section id="history" class="page">
+                <h1>Invoice History</h1>
+                <p class="muted">Search and manage saved invoices.</p>
+                <div class="panel">
+                    <input id="historySearch" placeholder="Search invoice or customer..." oninput="renderHistory()">
+                    <div class="table-wrap" id="invoiceHistory" style="margin-top:18px"></div>
+                </div>
+            </section>
+
+            <!-- BACKGROUNDS -->
+            <section id="backgrounds" class="page">
+                <h1>Saved Backgrounds</h1>
+                <p class="muted">Upload and manage reusable invoice backgrounds.</p>
+                <div class="panel">
+                    <label>Background name</label>
+                    <input id="backgroundName" placeholder="e.g. XLANTIS Blue Template">
+                    <label>Choose image</label>
+                    <input id="backgroundLibraryFile" type="file" accept="image/png,image/jpeg,image/webp">
+                    <button class="primary" style="margin-top:15px" onclick="uploadLibraryBackground()">Upload & Save Background</button>
+                    <div id="backgroundMessage"></div>
+                </div>
+                <div class="cards" id="backgroundList"></div>
+            </section>
+        </main>
+    </div>
+</div>
+
+<script>
+// ==========================================
+// SUPABASE CONNECTION
+// ==========================================
+
+const SUPABASE_URL = "https://jnexvwtjubchghwyuqzv.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_kIvMdifOzu7Msj4qVos-Sg_O4Tc9dQn";
+
+const db = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY
+);
+
+let currentUser = null;
+let invoices = [];
+let backgrounds = [];
+let temporaryBackground = null;
+let savedBackgroundPath = null;
+let invoiceItems = [];
+
+// ==========================================
+// AUTHENTICATION
+// ==========================================
+
+async function login() {
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    const message = document.getElementById("loginMessage");
+
+    message.textContent = "Signing in...";
+
+    const { data, error } = await db.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (error) {
+        message.textContent = error.message;
+        return;
+    }
+
+    currentUser = data.user;
+    await openApplication();
+}
+
+async function logout() {
+    await db.auth.signOut();
+    currentUser = null;
+    document.getElementById("app").classList.add("hidden");
+    document.getElementById("loginScreen").classList.remove("hidden");
+}
+
+async function openApplication() {
+    document.getElementById("loginScreen").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    document.getElementById("adminEmail").textContent = currentUser.email;
+    document.getElementById("invoiceDate").value =
+        new Date().toISOString().slice(0,10);
+
+    await loadInvoices();
+    await loadBackgrounds();
+}
+
+async function checkSession() {
+    const { data } = await db.auth.getSession();
+    if (data.session) {
+        currentUser = data.session.user;
+        await openApplication();
+    }
+}
+
+// ==========================================
+// NAVIGATION
+// ==========================================
+
+function showPage(page, button) {
+    document.querySelectorAll(".page").forEach(el => el.classList.remove("active"));
+    document.getElementById(page).classList.add("active");
+
+    document.querySelectorAll(".nav").forEach(el => el.classList.remove("active"));
+    if (button) button.classList.add("active");
+
+    if (page === "history") renderHistory();
+    if (page === "backgrounds") renderBackgrounds();
+}
+
+// ==========================================
+// INVOICE ITEMS
+// ==========================================
+
+function addItem(description = "", quantity = 1, price = 0) {
+    const id = Date.now() + Math.random();
+
+    invoiceItems.push({ id, description, quantity, price });
+
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.dataset.id = id;
+
+    row.innerHTML = `
+        <input placeholder="Service description" value="${escapeHTML(description)}"
+            oninput="updateItem(${id},'description',this.value)">
+        <input type="number" min="0.01" step="0.01" value="${quantity}"
+            oninput="updateItem(${id},'quantity',this.value)">
+        <input type="number" min="0" step="0.01" value="${price}"
+            oninput="updateItem(${id},'price',this.value)">
+        <button class="remove-item" onclick="removeItem(${id})">×</button>
+    `;
+
+    document.getElementById("items").appendChild(row);
+    calculateTotal();
+}
+
+function escapeHTML(value) {
+    return String(value).replace(/[&<>"']/g, char => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    })[char]);
+}
+
+function updateItem(id, field, value) {
+    const item = invoiceItems.find(x => x.id === id);
+    if (!item) return;
+    item[field] = field === "description" ? value : Number(value);
+    calculateTotal();
+}
+
+function removeItem(id) {
+    invoiceItems = invoiceItems.filter(x => x.id !== id);
+    document.querySelector(`[data-id="${id}"]`)?.remove();
+    calculateTotal();
+}
+
+function calculateTotal() {
+    const subtotal = invoiceItems.reduce(
+        (sum, item) => sum + (Number(item.quantity)||0) * (Number(item.price)||0), 0
+    );
+    const tax = Math.max(0, Number(document.getElementById("tax").value)||0);
+    document.getElementById("subtotal").textContent = money(subtotal);
+    document.getElementById("grandTotal").textContent = money(subtotal + tax);
+    return { subtotal, tax, total: subtotal + tax };
+}
+
+function money(value) {
+    return "₹" + Number(value).toLocaleString("en-IN", {
+        minimumFractionDigits:2,
+        maximumFractionDigits:2
+    });
+}
+
+// ==========================================
+// BACKGROUND UPLOAD
+// ==========================================
+
+document.getElementById("backgroundFile").addEventListener("change", async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
+        alert("Choose a PNG, JPG or WEBP image under 5 MB.");
+        event.target.value = "";
+        return;
+    }
+
+    temporaryBackground = await fileToDataURL(file);
+    savedBackgroundPath = null;
+    document.getElementById("backgroundPreview").src = temporaryBackground;
+    document.getElementById("backgroundPreview").style.display = "block";
+    document.getElementById("savedBackground").value = "";
+});
+
+function fileToDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+async function selectSavedBackground() {
+    const path = document.getElementById("savedBackground").value;
+    temporaryBackground = null;
+    savedBackgroundPath = path || null;
+
+    if (!path) {
+        document.getElementById("backgroundPreview").style.display = "none";
+        return;
+    }
+
+    const { data, error } = await db.storage
+        .from("invoice-backgrounds")
+        .createSignedUrl(path, 300);
+
+    if (error) {
+        alert("Unable to load background: " + error.message);
+        return;
+    }
+
+    temporaryBackground = await imageURLToDataURL(data.signedUrl);
+    document.getElementById("backgroundPreview").src = temporaryBackground;
+    document.getElementById("backgroundPreview").style.display = "block";
+}
+
+function imageURLToDataURL(url) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+            canvas.getContext("2d").drawImage(image, 0, 0);
+            resolve(canvas.toDataURL("image/png"));
+        };
+        image.onerror = reject;
+        image.src = url;
+    });
+}
+
+async function uploadLibraryBackground() {
+    const file = document.getElementById("backgroundLibraryFile").files[0];
+    const name = document.getElementById("backgroundName").value.trim();
+    const message = document.getElementById("backgroundMessage");
+
+    if (!file || !name) {
+        message.textContent = "Enter a name and select an image.";
+        return;
+    }
+
+    if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
+        message.textContent = "Choose an image under 5 MB.";
+        return;
+    }
+
+    message.textContent = "Uploading...";
+
+    const path = `${currentUser.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
+
+    const { error: uploadError } = await db.storage
+        .from("invoice-backgrounds")
+        .upload(path, file);
+
+    if (uploadError) {
+        message.textContent = uploadError.message;
+        return;
+    }
+
+    const { error } = await db.from("invoice_backgrounds").insert({
+        name,
+        storage_path: path,
+        created_by: currentUser.id
+    });
+
+    if (error) {
+        message.textContent = error.message;
+        return;
+    }
+
+    message.textContent = "Background saved successfully.";
+    document.getElementById("backgroundName").value = "";
+    document.getElementById("backgroundLibraryFile").value = "";
+    await loadBackgrounds();
+}
+
+async function loadBackgrounds() {
+    const { data, error } = await db.from("invoice_backgrounds")
+        .select("*").order("created_at", { ascending:false });
+
+    if (error) {
+        console.error(error);
+        return;
+    }
+
+    backgrounds = data || [];
+
+    const select = document.getElementById("savedBackground");
+    select.innerHTML = '<option value="">No background</option>';
+
+    backgrounds.forEach(bg => {
+        const option = document.createElement("option");
+        option.value = bg.storage_path;
+        option.textContent = bg.name;
+        select.appendChild(option);
+    });
+
+    renderBackgrounds();
+}
+
+function renderBackgrounds() {
+    const container = document.getElementById("backgroundList");
+    container.innerHTML = "";
+
+    backgrounds.forEach(bg => {
+        const card = document.createElement("div");
+        card.className = "card";
+        const title = document.createElement("strong");
+        title.textContent = bg.name;
+
+        const button = document.createElement("button");
+        button.className = "danger";
+        button.style.marginTop = "15px";
+        button.textContent = "Delete background";
+        button.onclick = () => deleteBackground(bg);
+
+        card.append(title, document.createElement("br"), button);
+        container.appendChild(card);
+    });
+
+    if (!backgrounds.length) {
+        container.textContent = "No saved backgrounds yet.";
+    }
+}
+
+async function deleteBackground(bg) {
+    if (!confirm(`Delete background "${bg.name}"?`)) return;
+
+    const { error: storageError } = await db.storage
+        .from("invoice-backgrounds").remove([bg.storage_path]);
+
+    if (storageError) {
+        alert(storageError.message);
+        return;
+    }
+
+    const { error } = await db.from("invoice_backgrounds")
+        .delete().eq("id", bg.id);
+
+    if (error) {
+        alert(error.message);
+        return;
+    }
+
+    await loadBackgrounds();
+}
+
+// ==========================================
+// INVOICE NUMBER
+// ==========================================
+
+async function nextInvoiceNumber() {
+    const year = new Date().getFullYear();
+    const prefix = `XLC-${year}-`;
+
+    const { data, error } = await db.from("invoices")
+        .select("invoice_number")
+        .like("invoice_number", `${prefix}%`)
+        .order("invoice_number", { ascending:false })
+        .limit(1);
+
+    if (error) throw error;
+
+    const last = data?.[0]?.invoice_number || "";
+    const lastNumber = Number(last.split("-").pop()) || 0;
+
+    return prefix + String(lastNumber + 1).padStart(5, "0");
+}
+
+// ==========================================
+// CREATE INVOICE
+// ==========================================
+
+async function createInvoice() {
+    const message = document.getElementById("message");
+    message.textContent = "";
+
+    const customerName = document.getElementById("customerName").value.trim();
+
+    if (!customerName) {
+        message.textContent = "Customer name is required.";
+        return;
+    }
+
+    if (!invoiceItems.length || invoiceItems.some(
+        item => !item.description.trim() ||
+        Number(item.quantity) <= 0 ||
+        Number(item.price) < 0
+    )) {
+        message.textContent = "Add at least one valid service.";
+        return;
+    }
+
+    const totals = calculateTotal();
+    const saveBackground = document.getElementById("saveBackground").checked;
+    let backgroundPath = savedBackgroundPath;
+
+    message.textContent = "Saving invoice...";
+
+    try {
+        // Save a one-time background to private storage only if requested.
+        if (temporaryBackground && !savedBackgroundPath && saveBackground) {
+            const file = document.getElementById("backgroundFile").files[0];
+            if (!file) throw new Error("Select a background image first.");
+
+            const path = `${currentUser.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
+
+            const { error } = await db.storage
+                .from("invoice-backgrounds").upload(path, file);
+
+            if (error) throw error;
+
+            const { error: recordError } = await db.from("invoice_backgrounds").insert({
+                name: file.name,
+                storage_path: path,
+                created_by: currentUser.id
+            });
+
+            if (recordError) throw recordError;
+            backgroundPath = path;
+            await loadBackgrounds();
+        }
+
+        const invoiceNumber = await nextInvoiceNumber();
+
+        const invoice = {
+            invoice_number: invoiceNumber,
+            customer_name: customerName,
+            customer_email: document.getElementById("customerEmail").value.trim() || null,
+            customer_phone: document.getElementById("customerPhone").value.trim() || null,
+            vehicle_name: document.getElementById("vehicleName").value.trim() || null,
+            vehicle_number: document.getElementById("vehicleNumber").value.trim() || null,
+            invoice_date: document.getElementById("invoiceDate").value || null,
+            due_date: document.getElementById("dueDate").value || null,
+            payment_method: document.getElementById("paymentMethod").value,
+            payment_status: "Pending",
+            service_description: invoiceItems.map(x => x.description).join(", "),
+            subtotal: totals.subtotal,
+            tax: totals.tax,
+            total: totals.total,
+            background_path: backgroundPath,
+            notes: document.getElementById("invoiceNotes").value.trim() || null,
+            created_by: currentUser.id
+        };
+
+        const { data, error } = await db.from("invoices")
+            .insert(invoice).select().single();
+
+        if (error) throw error;
+
+        const rows = invoiceItems.map(item => ({
+            invoice_id: data.id,
+            description: item.description,
+            quantity: Number(item.quantity),
+            unit_price: Number(item.price),
+            line_total: Number(item.quantity) * Number(item.price)
+        }));
+
+        const { error: itemsError } = await db.from("invoice_items").insert(rows);
+
+        if (itemsError) {
+            await db.from("invoices").delete().eq("id", data.id);
+            throw itemsError;
+        }
+
+        message.textContent = "Invoice saved. Preparing PDF...";
+        await generatePDF(data, invoiceItems, temporaryBackground);
+
+        await loadInvoices();
+        message.textContent = `Invoice ${invoiceNumber} created successfully.`;
+
+    } catch (error) {
+        console.error(error);
+        message.textContent = "Error: " + error.message;
+    }
+}
+
+// ==========================================
+// PDF GENERATION
+// ==========================================
+
+async function generatePDF(invoice, items, backgroundData) {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const opacity = Number(document.getElementById("backgroundOpacity").value) / 100;
+
+    if (backgroundData) {
+        const image = new Image();
+        image.src = backgroundData;
+        await new Promise((resolve,reject) => {
+            image.onload = resolve;
+            image.onerror = reject;
+        });
+
+        pdf.saveGraphicsState();
+        pdf.setGState(new pdf.GState({ opacity }));
+        pdf.addImage(backgroundData, "PNG", 0, 0, pageWidth, pageHeight);
+        pdf.restoreGraphicsState();
+    }
+
+    pdf.setFillColor(16, 92, 180);
+    pdf.rect(0, 0, pageWidth, 38, "F");
+
+    pdf.setTextColor(255,255,255);
+    pdf.setFont("helvetica","bold");
+    pdf.setFontSize(20);
+    pdf.text("XLANTIS CUSTOMS", 15, 19);
+
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica","normal");
+    pdf.text("VEHICLE DEVELOPMENT & CUSTOMIZATION", 15, 28);
+    pdf.text("INVOICE", 165, 20);
+
+    pdf.setTextColor(25,40,60);
+    pdf.setFontSize(10);
+
+    pdf.text(`Invoice: ${invoice.invoice_number}`, 15, 52);
+    pdf.text(`Date: ${invoice.invoice_date || "-"}`, 15, 59);
+    pdf.text(`Due: ${invoice.due_date || "-"}`, 15, 66);
+
+    pdf.setFont("helvetica","bold");
+    pdf.text("BILL TO", 15, 83);
+
+    pdf.setFont("helvetica","normal");
+    pdf.text(invoice.customer_name || "-", 15, 91);
+    pdf.text(`Phone: ${invoice.customer_phone || "-"}`, 15, 98);
+    pdf.text(`Email: ${invoice.customer_email || "-"}`, 15, 105);
+    pdf.text(`Vehicle: ${invoice.vehicle_name || "-"}`, 15, 112);
+    pdf.text(`Vehicle No: ${invoice.vehicle_number || "-"}`, 15, 119);
+
+    let y = 140;
+
+    pdf.setFillColor(16,92,180);
+    pdf.rect(15,y,180,10,"F");
+
+    pdf.setTextColor(255,255,255);
+    pdf.setFont("helvetica","bold");
+    pdf.text("DESCRIPTION",19,y+7);
+    pdf.text("QTY",130,y+7);
+    pdf.text("PRICE",151,y+7);
+    pdf.text("TOTAL",178,y+7);
+
+    y += 17;
+    pdf.setTextColor(30,45,65);
+    pdf.setFont("helvetica","normal");
+
+    items.forEach(item => {
+        if (y > 245) {
+            pdf.addPage();
+            y = 25;
+        }
+
+        const description = pdf.splitTextToSize(item.description, 95);
+        pdf.text(description,19,y);
+        pdf.text(String(item.quantity),130,y);
+        pdf.text(money(item.price),151,y);
+        pdf.text(money(item.quantity * item.price),178,y);
+        y += Math.max(10, description.length * 5);
+    });
+
+    y += 8;
+    pdf.setDrawColor(190,205,220);
+    pdf.line(120,y,195,y);
+    y += 10;
+
+    pdf.setFont("helvetica","normal");
+    pdf.text(`Subtotal: ${money(invoice.subtotal)}`, 145, y);
+    y += 8;
+    pdf.text(`Tax / Extras: ${money(invoice.tax)}`, 145, y);
+    y += 10;
+
+    pdf.setFont("helvetica","bold");
+    pdf.setFontSize(14);
+    pdf.setTextColor(16,92,180);
+    pdf.text(`TOTAL: ${money(invoice.total)}`, 145, y);
+
+    y += 17;
+    pdf.setFontSize(10);
+    pdf.setTextColor(30,45,65);
+    pdf.setFont("helvetica","normal");
+    pdf.text(`Payment method: ${invoice.payment_method || "UPI"}`, 15, y);
+    y += 9;
+    pdf.text(`Payment status: ${invoice.payment_status}`, 15, y);
+
+    if (invoice.notes) {
+        y += 12;
+        pdf.text("Notes:",15,y);
+        y += 6;
+        pdf.text(pdf.splitTextToSize(invoice.notes,175),15,y);
+    }
+
+    pdf.setFontSize(9);
+    pdf.setTextColor(100,115,130);
+    pdf.text("Thank you for choosing XLANTIS CUSTOMS.", 105, 282, {align:"center"});
+    pdf.save(`${invoice.invoice_number}.pdf`);
+}
+
+// ==========================================
+// INVOICE HISTORY AND DASHBOARD
+// ==========================================
+
+async function loadInvoices() {
+    const { data, error } = await db.from("invoices")
+        .select("*").order("created_at", { ascending:false });
+
+    if (error) {
+        console.error(error);
+        alert("Unable to load invoices: " + error.message);
+        return;
+    }
+
+    invoices = data || [];
+    renderHistory();
+    updateDashboard();
+}
+
+function renderHistory() {
+    const search = (document.getElementById("historySearch")?.value || "").toLowerCase();
+
+    const filtered = invoices.filter(invoice =>
+        invoice.invoice_number.toLowerCase().includes(search) ||
+        invoice.customer_name.toLowerCase().includes(search)
+    );
+
+    const html = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Invoice</th>
+                    <th>Customer</th>
+                    <th>Date</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${filtered.map(invoice => `
+                    <tr>
+                        <td>${escapeHTML(invoice.invoice_number)}</td>
+                        <td>${escapeHTML(invoice.customer_name)}</td>
+                        <td>${escapeHTML(invoice.invoice_date || "-")}</td>
+                        <td>${money(invoice.total)}</td>
+                        <td><span class="status ${invoice.payment_status === "Paid" ? "paid" : ""}">
+                            ${escapeHTML(invoice.payment_status)}
+                        </span></td>
+                        <td>
+                            ${invoice.payment_status !== "Paid"
+                                ? `<button class="secondary" onclick="markPaid('${invoice.id}')">Mark paid</button>`
+                                : "—"}
+                        </td>
+                    </tr>
+                `).join("")}
+            </tbody>
+        </table>
+    `;
+
+    document.getElementById("invoiceHistory").innerHTML =
+        filtered.length ? html : '<p class="muted">No invoices found.</p>';
+}
+
+function updateDashboard() {
+    const total = invoices.reduce((sum,x) => sum + Number(x.total || 0),0);
+    const paid = invoices.filter(x => x.payment_status === "Paid")
+        .reduce((sum,x) => sum + Number(x.total || 0),0);
+    const pending = invoices.filter(x => x.payment_status !== "Paid");
+
+    document.getElementById("metricInvoices").textContent = invoices.length;
+    document.getElementById("metricRevenue").textContent = money(paid);
+    document.getElementById("metricOutstanding").textContent = money(total-paid);
+    document.getElementById("metricPending").textContent = pending.length;
+
+    const recent = invoices.slice(0,5);
+
+    document.getElementById("recentInvoices").innerHTML = recent.length
+        ? `<table><thead><tr><th>Invoice</th><th>Customer</th><th>Total</th><th>Status</th></tr></thead><tbody>
+            ${recent.map(x => `<tr>
+                <td>${escapeHTML(x.invoice_number)}</td>
+                <td>${escapeHTML(x.customer_name)}</td>
+                <td>${money(x.total)}</td>
+                <td>${escapeHTML(x.payment_status)}</td>
+            </tr>`).join("")}
+           </tbody></table>`
+        : '<p class="muted">No invoices created yet.</p>';
+}
+
+async function markPaid(id) {
+    if (!confirm("Mark this invoice as paid?")) return;
+
+    const { error } = await db.from("invoices")
+        .update({ payment_status:"Paid" })
+        .eq("id",id);
+
+    if (error) {
+        alert(error.message);
+        return;
+    }
+
+    await loadInvoices();
+}
+
+// ==========================================
+// RESET FORM
+// ==========================================
+
+function resetForm() {
+    if (!confirm("Clear the current invoice form?")) return;
+
+    [
+        "customerName","customerPhone","customerEmail",
+        "vehicleName","vehicleNumber","dueDate",
+        "invoiceNotes","backgroundFile"
+    ].forEach(id => document.getElementById(id).value = "");
+
+    document.getElementById("tax").value = 0;
+    document.getElementById("saveBackground").checked = false;
+    document.getElementById("savedBackground").value = "";
+    document.getElementById("backgroundPreview").style.display = "none";
+    temporaryBackground = null;
+    savedBackgroundPath = null;
+    invoiceItems = [];
+    document.getElementById("items").innerHTML = "";
+    addItem();
+}
+
+addItem();
+checkSession();
+</script>
+
+</body>
+</html>

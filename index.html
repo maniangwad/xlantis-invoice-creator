@@ -7,7 +7,7 @@
 <title>XLANTIS CUSTOMS | Invoice Manager</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 <style>
 :root {
@@ -42,19 +42,6 @@ button {
 .hidden {display:none!important}
 .muted {color:var(--muted)}
 .small {font-size:12px}
-#loginScreen {
-    min-height:100vh;
-    display:grid;
-    place-items:center;
-    padding:20px;
-}
-.login-card {
-    width:min(420px,100%);
-    background:var(--panel);
-    padding:32px;
-    border:1px solid var(--border);
-    border-radius:16px;
-}
 .logo {font-size:23px;font-weight:900;letter-spacing:1px}
 .logo span {color:var(--blue)}
 input,select,textarea {
@@ -168,33 +155,11 @@ th {color:var(--muted)}
 
 <body>
 
-<!-- LOGIN -->
-<section id="loginScreen">
-    <div class="login-card">
-        <div class="logo">⚡ XLANTIS <span>CUSTOMS</span></div>
-        <p class="muted">Invoice Management System</p>
-
-        <label>Email address</label>
-        <input id="loginEmail" type="email" placeholder="Admin email">
-
-        <label>Password</label>
-        <input id="loginPassword" type="password" placeholder="Password">
-
-        <button class="primary" style="width:100%;margin-top:20px"
-            onclick="login()">Sign In</button>
-
-        <div id="loginMessage"></div>
-    </div>
-</section>
-
 <!-- APPLICATION -->
-<div id="app" class="hidden">
+<div id="app">
     <header>
         <div class="logo">⚡ XLANTIS <span>CUSTOMS</span></div>
-        <div class="row">
-            <span class="muted small" id="adminEmail"></span>
-            <button class="secondary" onclick="logout()">Logout</button>
-        </div>
+
     </header>
 
     <div class="layout">
@@ -325,7 +290,7 @@ th {color:var(--muted)}
                     <label>Notes</label>
                     <textarea id="invoiceNotes" rows="3" placeholder="Payment terms or additional notes"></textarea>
                     <div class="actions">
-                        <button class="primary" onclick="createInvoice()">Save Invoice & Generate PDF</button>
+                        <button class="primary" onclick="createInvoice()">Save Invoice & Download PNG</button>
                         <button class="secondary" onclick="resetForm()">Reset</button>
                     </div>
                     <div id="message"></div>
@@ -373,62 +338,19 @@ const db = window.supabase.createClient(
     SUPABASE_PUBLISHABLE_KEY
 );
 
-let currentUser = null;
+let currentUser = { id: "public" };
 let invoices = [];
 let backgrounds = [];
 let temporaryBackground = null;
 let savedBackgroundPath = null;
 let invoiceItems = [];
 
-// ==========================================
-// AUTHENTICATION
-// ==========================================
-
-async function login() {
-    const email = document.getElementById("loginEmail").value.trim();
-    const password = document.getElementById("loginPassword").value;
-    const message = document.getElementById("loginMessage");
-
-    message.textContent = "Signing in...";
-
-    const { data, error } = await db.auth.signInWithPassword({
-        email,
-        password
-    });
-
-    if (error) {
-        message.textContent = error.message;
-        return;
-    }
-
-    currentUser = data.user;
-    await openApplication();
-}
-
-async function logout() {
-    await db.auth.signOut();
-    currentUser = null;
-    document.getElementById("app").classList.add("hidden");
-    document.getElementById("loginScreen").classList.remove("hidden");
-}
-
+// Public dashboard: no sign-in screen. Access is controlled by the
+// public Supabase policies installed with the companion SQL script.
 async function openApplication() {
-    document.getElementById("loginScreen").classList.add("hidden");
-    document.getElementById("app").classList.remove("hidden");
-    document.getElementById("adminEmail").textContent = currentUser.email;
-    document.getElementById("invoiceDate").value =
-        new Date().toISOString().slice(0,10);
-
+    document.getElementById("invoiceDate").value = new Date().toISOString().slice(0,10);
     await loadInvoices();
     await loadBackgrounds();
-}
-
-async function checkSession() {
-    const { data } = await db.auth.getSession();
-    if (data.session) {
-        currentUser = data.session.user;
-        await openApplication();
-    }
 }
 
 // ==========================================
@@ -549,16 +471,11 @@ async function selectSavedBackground() {
         return;
     }
 
-    const { data, error } = await db.storage
+    const { data } = db.storage
         .from("invoice-backgrounds")
-        .createSignedUrl(path, 300);
+        .getPublicUrl(path);
 
-    if (error) {
-        alert("Unable to load background: " + error.message);
-        return;
-    }
-
-    temporaryBackground = await imageURLToDataURL(data.signedUrl);
+    temporaryBackground = await imageURLToDataURL(data.publicUrl);
     document.getElementById("backgroundPreview").src = temporaryBackground;
     document.getElementById("backgroundPreview").style.display = "block";
 }
@@ -596,7 +513,7 @@ async function uploadLibraryBackground() {
 
     message.textContent = "Uploading...";
 
-    const path = `${currentUser.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
+    const path = `public/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
 
     const { error: uploadError } = await db.storage
         .from("invoice-backgrounds")
@@ -610,7 +527,7 @@ async function uploadLibraryBackground() {
     const { error } = await db.from("invoice_backgrounds").insert({
         name,
         storage_path: path,
-        created_by: currentUser.id
+        created_by: null
     });
 
     if (error) {
@@ -753,7 +670,7 @@ async function createInvoice() {
             const file = document.getElementById("backgroundFile").files[0];
             if (!file) throw new Error("Select a background image first.");
 
-            const path = `${currentUser.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
+            const path = `public/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
 
             const { error } = await db.storage
                 .from("invoice-backgrounds").upload(path, file);
@@ -763,7 +680,7 @@ async function createInvoice() {
             const { error: recordError } = await db.from("invoice_backgrounds").insert({
                 name: file.name,
                 storage_path: path,
-                created_by: currentUser.id
+                created_by: null
             });
 
             if (recordError) throw recordError;
@@ -790,7 +707,7 @@ async function createInvoice() {
             total: totals.total,
             background_path: backgroundPath,
             notes: document.getElementById("invoiceNotes").value.trim() || null,
-            created_by: currentUser.id
+            created_by: null
         };
 
         const { data, error } = await db.from("invoices")
@@ -813,8 +730,8 @@ async function createInvoice() {
             throw itemsError;
         }
 
-        message.textContent = "Invoice saved. Preparing PDF...";
-        await generatePDF(data, invoiceItems, temporaryBackground);
+        message.textContent = "Invoice saved. Preparing PNG...";
+        await generatePNG(data, invoiceItems, temporaryBackground);
 
         await loadInvoices();
         message.textContent = `Invoice ${invoiceNumber} created successfully.`;
@@ -826,126 +743,39 @@ async function createInvoice() {
 }
 
 // ==========================================
-// PDF GENERATION
+// PNG INVOICE GENERATION
 // ==========================================
-
-async function generatePDF(invoice, items, backgroundData) {
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
-
-    const pageWidth = 210;
-    const pageHeight = 297;
+async function generatePNG(invoice, items, backgroundData) {
     const opacity = Number(document.getElementById("backgroundOpacity").value) / 100;
-
-    if (backgroundData) {
-        const image = new Image();
-        image.src = backgroundData;
-        await new Promise((resolve,reject) => {
-            image.onload = resolve;
-            image.onerror = reject;
-        });
-
-        pdf.saveGraphicsState();
-        pdf.setGState(new pdf.GState({ opacity }));
-        pdf.addImage(backgroundData, "PNG", 0, 0, pageWidth, pageHeight);
-        pdf.restoreGraphicsState();
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "position:fixed;left:-10000px;top:0;width:1000px;background:#fff;color:#1e2d41;font-family:Arial,sans-serif;padding:0;z-index:-1";
+    const safe = value => escapeHTML(String(value ?? "-"));
+    const itemRows = items.map(item => `<tr><td>${safe(item.description)}</td><td>${safe(item.quantity)}</td><td>${safe(money(item.price))}</td><td>${safe(money(Number(item.quantity)*Number(item.price)))}</td></tr>`).join("");
+    wrap.innerHTML = `
+      <div style="position:relative;min-height:1200px;padding:70px 72px 55px;overflow:hidden">
+        ${backgroundData ? `<img src="${backgroundData}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:${opacity};z-index:0">` : ""}
+        <div style="position:relative;z-index:1">
+          <div style="background:#105cb4;color:white;margin:-70px -72px 55px;padding:38px 72px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:36px;font-weight:900">XLANTIS CUSTOMS</div><div style="font-size:16px;margin-top:8px">VEHICLE DEVELOPMENT &amp; CUSTOMIZATION</div></div><div style="font-size:28px;font-weight:bold">INVOICE</div></div>
+          <div style="font-size:18px;line-height:1.9">Invoice: ${safe(invoice.invoice_number)}<br>Date: ${safe(invoice.invoice_date)}<br>Due: ${safe(invoice.due_date)}</div>
+          <h3 style="margin:42px 0 12px;color:#105cb4">BILL TO</h3>
+          <div style="font-size:18px;line-height:1.8">${safe(invoice.customer_name)}<br>Phone: ${safe(invoice.customer_phone)}<br>Email: ${safe(invoice.customer_email)}<br>Vehicle: ${safe(invoice.vehicle_name)}<br>Vehicle No: ${safe(invoice.vehicle_number)}</div>
+          <table style="width:100%;border-collapse:collapse;margin-top:45px;font-size:17px"><thead><tr style="background:#105cb4;color:#fff"><th style="padding:16px;text-align:left">DESCRIPTION</th><th style="padding:16px">QTY</th><th style="padding:16px">PRICE</th><th style="padding:16px">TOTAL</th></tr></thead><tbody>${itemRows}</tbody></table>
+          <div style="margin:35px 0 0 auto;width:390px;font-size:18px;line-height:2;border-top:2px solid #bdcddd;padding-top:18px;text-align:right">Subtotal: ${safe(money(invoice.subtotal))}<br>Tax / Extras: ${safe(money(invoice.tax))}<br><strong style="font-size:26px;color:#105cb4">TOTAL: ${safe(money(invoice.total))}</strong></div>
+          <div style="margin-top:35px;font-size:18px;line-height:1.9">Payment method: ${safe(invoice.payment_method || "UPI")}<br>Payment status: ${safe(invoice.payment_status)}</div>
+          ${invoice.notes ? `<div style="margin-top:28px;font-size:17px;white-space:pre-wrap"><strong>Notes:</strong><br>${safe(invoice.notes)}</div>` : ""}
+          <div style="text-align:center;margin-top:65px;color:#647382">Thank you for choosing XLANTIS CUSTOMS.</div>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    try {
+        const canvas = await html2canvas(wrap, {scale:2, useCORS:true, backgroundColor:"#ffffff"});
+        const link = document.createElement("a");
+        link.download = `${invoice.invoice_number}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+    } finally {
+        wrap.remove();
     }
-
-    pdf.setFillColor(16, 92, 180);
-    pdf.rect(0, 0, pageWidth, 38, "F");
-
-    pdf.setTextColor(255,255,255);
-    pdf.setFont("helvetica","bold");
-    pdf.setFontSize(20);
-    pdf.text("XLANTIS CUSTOMS", 15, 19);
-
-    pdf.setFontSize(10);
-    pdf.setFont("helvetica","normal");
-    pdf.text("VEHICLE DEVELOPMENT & CUSTOMIZATION", 15, 28);
-    pdf.text("INVOICE", 165, 20);
-
-    pdf.setTextColor(25,40,60);
-    pdf.setFontSize(10);
-
-    pdf.text(`Invoice: ${invoice.invoice_number}`, 15, 52);
-    pdf.text(`Date: ${invoice.invoice_date || "-"}`, 15, 59);
-    pdf.text(`Due: ${invoice.due_date || "-"}`, 15, 66);
-
-    pdf.setFont("helvetica","bold");
-    pdf.text("BILL TO", 15, 83);
-
-    pdf.setFont("helvetica","normal");
-    pdf.text(invoice.customer_name || "-", 15, 91);
-    pdf.text(`Phone: ${invoice.customer_phone || "-"}`, 15, 98);
-    pdf.text(`Email: ${invoice.customer_email || "-"}`, 15, 105);
-    pdf.text(`Vehicle: ${invoice.vehicle_name || "-"}`, 15, 112);
-    pdf.text(`Vehicle No: ${invoice.vehicle_number || "-"}`, 15, 119);
-
-    let y = 140;
-
-    pdf.setFillColor(16,92,180);
-    pdf.rect(15,y,180,10,"F");
-
-    pdf.setTextColor(255,255,255);
-    pdf.setFont("helvetica","bold");
-    pdf.text("DESCRIPTION",19,y+7);
-    pdf.text("QTY",130,y+7);
-    pdf.text("PRICE",151,y+7);
-    pdf.text("TOTAL",178,y+7);
-
-    y += 17;
-    pdf.setTextColor(30,45,65);
-    pdf.setFont("helvetica","normal");
-
-    items.forEach(item => {
-        if (y > 245) {
-            pdf.addPage();
-            y = 25;
-        }
-
-        const description = pdf.splitTextToSize(item.description, 95);
-        pdf.text(description,19,y);
-        pdf.text(String(item.quantity),130,y);
-        pdf.text(money(item.price),151,y);
-        pdf.text(money(item.quantity * item.price),178,y);
-        y += Math.max(10, description.length * 5);
-    });
-
-    y += 8;
-    pdf.setDrawColor(190,205,220);
-    pdf.line(120,y,195,y);
-    y += 10;
-
-    pdf.setFont("helvetica","normal");
-    pdf.text(`Subtotal: ${money(invoice.subtotal)}`, 145, y);
-    y += 8;
-    pdf.text(`Tax / Extras: ${money(invoice.tax)}`, 145, y);
-    y += 10;
-
-    pdf.setFont("helvetica","bold");
-    pdf.setFontSize(14);
-    pdf.setTextColor(16,92,180);
-    pdf.text(`TOTAL: ${money(invoice.total)}`, 145, y);
-
-    y += 17;
-    pdf.setFontSize(10);
-    pdf.setTextColor(30,45,65);
-    pdf.setFont("helvetica","normal");
-    pdf.text(`Payment method: ${invoice.payment_method || "UPI"}`, 15, y);
-    y += 9;
-    pdf.text(`Payment status: ${invoice.payment_status}`, 15, y);
-
-    if (invoice.notes) {
-        y += 12;
-        pdf.text("Notes:",15,y);
-        y += 6;
-        pdf.text(pdf.splitTextToSize(invoice.notes,175),15,y);
-    }
-
-    pdf.setFontSize(9);
-    pdf.setTextColor(100,115,130);
-    pdf.text("Thank you for choosing XLANTIS CUSTOMS.", 105, 282, {align:"center"});
-    pdf.save(`${invoice.invoice_number}.pdf`);
 }
 
 // ==========================================
@@ -1077,7 +907,7 @@ function resetForm() {
 }
 
 addItem();
-checkSession();
+openApplication().catch(error => { console.error(error); alert("Unable to open dashboard: " + error.message); });
 </script>
 
 </body>

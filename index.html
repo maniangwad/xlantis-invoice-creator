@@ -86,6 +86,7 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
             <div class="nav-section">Workspace</div>
             <button class="nav active" data-page="dashboard" onclick="showPage('dashboard',this)">▦ <span>Dashboard</span></button>
             <button class="nav" data-page="history" onclick="showPage('history',this)">▤ <span>Invoices</span></button>
+            <button class="nav" data-page="clients" onclick="showPage('clients',this)">♙ <span>Clients</span></button>
             <button class="nav" data-page="create" onclick="showPage('create',this)">＋ <span>Create Invoice</span></button>
             <div class="nav-section">Configuration</div>
             <button class="nav" data-page="backgrounds" onclick="showPage('backgrounds',this)">▧ <span>Backgrounds</span></button>
@@ -107,6 +108,19 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
                     <div class="dashboard-panel-head"><h2>Recent Invoices</h2><button class="secondary" onclick="showPage('history',document.querySelector('[data-page=\'history\']'))">View all invoices →</button></div>
                     <div class="table-wrap" id="recentInvoices"></div>
                 </div>
+            </section>
+
+            <!-- CLIENTS -->
+            <section id="clients" class="page">
+                <div class="page-heading">
+                    <div><h1>Clients</h1><p class="muted">Contacts and invoice activity from your existing records.</p></div>
+                    <div class="client-count card"><div class="metric-label">Total Clients</div><div class="metric" id="clientCount">0</div></div>
+                </div>
+                <div class="panel">
+                    <input id="clientSearch" placeholder="Search client email or invoice number..." oninput="renderClients()">
+                    <div class="table-wrap" id="clientsTable" style="margin-top:18px"></div>
+                </div>
+                <p class="muted small" style="margin-top:12px">Clients are grouped by email address. You can also find a client using any associated invoice number.</p>
             </section>
 
             <!-- CREATE INVOICE -->
@@ -275,6 +289,7 @@ function showPage(page, button) {
     if (button) button.classList.add("active");
 
     if (page === "history") renderHistory();
+    if (page === "clients") renderClients();
     if (page === "backgrounds") renderBackgrounds();
 }
 
@@ -704,7 +719,51 @@ async function loadInvoices() {
 
     invoices = data || [];
     renderHistory();
+    renderClients();
     updateDashboard();
+}
+
+
+function getClientRecords() {
+    const records = new Map();
+    invoices.forEach(invoice => {
+        const email = String(invoice.customer_email || "").trim().toLowerCase();
+        // Group invoices by email. Invoices without an email remain individually searchable.
+        const key = email ? `email:${email}` : `invoice:${invoice.id}`;
+        if (!records.has(key)) records.set(key, {
+            email, invoices: [], total: 0, paid: 0, outstanding: 0
+        });
+        const client = records.get(key);
+        client.invoices.push(invoice);
+        if (invoice.payment_status !== "Cancelled") {
+            const amount = Number(invoice.total || 0);
+            client.total += amount;
+            if (invoice.payment_status === "Paid") client.paid += amount;
+            else client.outstanding += amount;
+        }
+    });
+    return [...records.values()].sort((a,b) => b.invoices.length - a.invoices.length);
+}
+
+function renderClients() {
+    const container = document.getElementById("clientsTable");
+    if (!container) return;
+    const search = (document.getElementById("clientSearch")?.value || "").trim().toLowerCase();
+    const clients = getClientRecords();
+    document.getElementById("clientCount").textContent = clients.length;
+    const filtered = clients.filter(client =>
+        client.email.toLowerCase().includes(search) ||
+        client.invoices.some(invoice => String(invoice.invoice_number || "").toLowerCase().includes(search))
+    );
+    if (!filtered.length) {
+        container.innerHTML = '<p class="muted" style="padding:12px">No matching clients or invoices found.</p>';
+        return;
+    }
+    container.innerHTML = `<table><thead><tr><th>Email</th><th>Invoices</th><th>Total Billed</th><th>Paid</th><th>Outstanding</th></tr></thead><tbody>
+        ${filtered.map(client => {
+            const invoiceNumbers = client.invoices.map(invoice => escapeHTML(invoice.invoice_number)).join(", ");
+            return `<tr><td>${client.email ? escapeHTML(client.email) : "—"}<div class="muted small" style="margin-top:5px">${invoiceNumbers}</div></td><td>${client.invoices.length}</td><td>${money(client.total)}</td><td>${money(client.paid)}</td><td>${money(client.outstanding)}</td></tr>`;
+        }).join("")}</tbody></table>`;
 }
 
 function getInvoiceDisplayStatus(invoice) {

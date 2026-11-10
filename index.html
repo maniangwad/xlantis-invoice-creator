@@ -192,8 +192,8 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
                     <h2>Contact and vehicle details</h2>
                     <div class="form-grid">
                         <div>
-                            <label>Customer phone</label>
-                            <input id="customerPhone" placeholder="Phone number">
+                            <label>Customer name</label>
+                            <input id="customerName" placeholder="Customer name">
                         </div>
                         <div>
                             <label>Customer email</label>
@@ -707,7 +707,7 @@ async function createInvoice() {
         const invoice = {
             invoice_number: invoiceNumber,
             customer_email: document.getElementById("customerEmail").value.trim() || null,
-            customer_phone: document.getElementById("customerPhone").value.trim() || null,
+            customer_name: document.getElementById("customerName").value.trim() || null,
             vehicle_name: document.getElementById("vehicleName").value.trim() || null,
             invoice_date: document.getElementById("invoiceDate").value || null,
             due_date: document.getElementById("dueDate").value || null,
@@ -780,7 +780,7 @@ async function generatePNG(invoice, items, backgroundData) {
           <div style="background:#105cb4;color:white;margin:-70px -72px 55px;padding:38px 72px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:36px;font-weight:900">XLANTIS CUSTOMS</div><div style="font-size:16px;margin-top:8px">VEHICLE DEVELOPMENT &amp; CUSTOMIZATION</div></div><div style="font-size:28px;font-weight:bold">INVOICE</div></div>
           <div style="font-size:18px;line-height:1.9">Invoice: ${safe(invoice.invoice_number)}<br>Date: ${safe(invoice.invoice_date)}<br>Due: ${safe(invoice.due_date)}</div>
           <h3 style="margin:42px 0 12px;color:#105cb4">SERVICE DETAILS</h3>
-          <div style="font-size:18px;line-height:1.8">${invoice.customer_phone ? `Phone: ${safe(invoice.customer_phone)}<br>` : ""}${invoice.customer_email ? `Email: ${safe(invoice.customer_email)}<br>` : ""}${invoice.vehicle_name ? `Vehicle: ${safe(invoice.vehicle_name)}` : ""}</div>
+          <div style="font-size:18px;line-height:1.8">${invoice.customer_name ? `Customer: ${safe(invoice.customer_name)}<br>` : ""}${invoice.customer_email ? `Email: ${safe(invoice.customer_email)}<br>` : ""}${invoice.vehicle_name ? `Vehicle: ${safe(invoice.vehicle_name)}` : ""}</div>
           <table style="width:100%;border-collapse:collapse;margin-top:45px;font-size:17px"><thead><tr style="background:#105cb4;color:#fff"><th style="padding:16px;text-align:left">DESCRIPTION</th><th style="padding:16px">QTY</th><th style="padding:16px">PRICE</th><th style="padding:16px">TOTAL</th></tr></thead><tbody>${itemRows}</tbody></table>
           <div style="margin:35px 0 0 auto;width:390px;font-size:18px;line-height:2;border-top:2px solid #bdcddd;padding-top:18px;text-align:right">Subtotal: ${safe(money(invoice.subtotal))}<br>Tax / Extras: ${safe(money(invoice.tax))}<br><strong style="font-size:26px;color:#105cb4">TOTAL: ${safe(money(invoice.total))}</strong></div>
           <div style="margin-top:35px;font-size:18px;line-height:1.9">Payment method: ${safe(invoice.payment_method || "UPI")}<br>Payment status: ${safe(invoice.payment_status)}</div>
@@ -1001,7 +1001,7 @@ async function viewInvoice(id) {
     try {
         const items = await getInvoiceItems(id);
         const lines = items.map(x => `${x.description} — ${x.quantity} × ${money(x.price)} = ${money(x.quantity*x.price)}`).join("\n");
-        alert(`Invoice: ${invoice.invoice_number}\nVehicle: ${invoice.vehicle_name || "—"}\nDate: ${invoice.invoice_date || "—"}\nDue: ${invoice.due_date || "—"}\nStatus: ${getInvoiceDisplayStatus(invoice)}\n\n${lines}\n\nSubtotal: ${money(invoice.subtotal)}\nTax / Extras: ${money(invoice.tax)}\nTotal: ${money(invoice.total)}\nPayment: ${invoice.payment_method || "—"}\nNotes: ${invoice.notes || "—"}`);
+        alert(`Invoice: ${invoice.invoice_number}\nCustomer: ${invoice.customer_name || "—"}\nVehicle: ${invoice.vehicle_name || "—"}\nDate: ${invoice.invoice_date || "—"}\nDue: ${invoice.due_date || "—"}\nStatus: ${getInvoiceDisplayStatus(invoice)}\n\n${lines}\n\nSubtotal: ${money(invoice.subtotal)}\nTax / Extras: ${money(invoice.tax)}\nTotal: ${money(invoice.total)}\nPayment: ${invoice.payment_method || "—"}\nNotes: ${invoice.notes || "—"}`);
     } catch (error) { alert("Unable to load invoice details: " + error.message); }
 }
 
@@ -1012,7 +1012,7 @@ async function editInvoice(id) {
         const items = await getInvoiceItems(id);
         editingInvoiceId = id;
         const values = {
-            customerPhone: invoice.customer_phone || "",
+            customerName: invoice.customer_name || "",
             customerEmail: invoice.customer_email || "", vehicleName: invoice.vehicle_name || "",
             invoiceDate: invoice.invoice_date || "",
             dueDate: invoice.due_date || "", paymentMethod: invoice.payment_method || "UPI",
@@ -1153,7 +1153,7 @@ function resetForm() {
     document.querySelector('#create .primary').textContent = 'Save Invoice & Download PNG';
 
     [
-        "customerPhone","customerEmail",
+        "customerName","customerEmail",
         "vehicleName","dueDate",
         "invoiceNotes","backgroundFile"
     ].forEach(id => document.getElementById(id).value = "");

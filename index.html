@@ -91,6 +91,10 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
             <button class="nav" data-page="reports" onclick="showPage('reports',this)">▥ <span>Reports</span></button>
             <button class="nav" data-page="create" onclick="showPage('create',this)">＋ <span>Create Invoice</span></button>
             <div class="nav-section">Configuration</div>
+            <button class="nav" data-page="services" onclick="showPage('services',this)">⚙ <span>Services & Pricing</span></button>
+            <button class="nav" data-page="expenses" onclick="showPage('expenses',this)">↗ <span>Expenses</span></button>
+            <button class="nav" data-page="activity" onclick="showPage('activity',this)">◷ <span>Activity Log</span></button>
+            <button class="nav" data-page="settings" onclick="showPage('settings',this)">⚙ <span>Settings</span></button>
             <button class="nav" data-page="backgrounds" onclick="showPage('backgrounds',this)">▧ <span>Backgrounds</span></button>
         </aside>
 
@@ -286,6 +290,29 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
                 </div>
             </section>
 
+            <!-- SERVICES -->
+            <section id="services" class="page">
+                <div class="page-heading"><div><h1>Services & Pricing</h1><p class="muted">Maintain reusable service names and default prices.</p></div></div>
+                <div class="panel"><div class="form-grid"><div><label>Service name</label><input id="serviceName" placeholder="e.g. Vehicle Conversion"></div><div><label>Default price (₹)</label><input id="servicePrice" type="number" min="0" step="0.01" placeholder="0.00"></div></div><button class="primary" style="margin-top:16px" onclick="saveService()">＋ Add Service</button></div>
+                <div class="panel" style="margin-top:18px"><div class="table-wrap" id="servicesTable"></div></div>
+                <p class="muted small">Service catalogue is stored in this browser. It does not change previously issued invoices.</p>
+            </section>
+
+            <!-- EXPENSES -->
+            <section id="expenses" class="page">
+                <div class="page-heading"><div><h1>Expenses</h1><p class="muted">Record operating costs to estimate net profit.</p></div></div>
+                <div class="cards"><div class="card"><div class="metric-label">Recorded Expenses</div><div class="metric" id="expenseTotal">₹0.00</div></div><div class="card"><div class="metric-label">Collected Revenue</div><div class="metric" id="expenseRevenue">₹0.00</div></div><div class="card"><div class="metric-label">Estimated Net</div><div class="metric" id="expenseNet">₹0.00</div></div></div>
+                <div class="panel"><div class="form-grid"><div><label>Expense description</label><input id="expenseDescription" placeholder="e.g. Developer payment"></div><div><label>Amount (₹)</label><input id="expenseAmount" type="number" min="0.01" step="0.01"></div><div><label>Date</label><input id="expenseDate" type="date"></div><div><label>Category</label><select id="expenseCategory"><option>Development</option><option>Software</option><option>Operations</option><option>Marketing</option><option>Other</option></select></div></div><button class="primary" style="margin-top:16px" onclick="addExpense()">＋ Add Expense</button></div>
+                <div class="panel" style="margin-top:18px"><div class="table-wrap" id="expensesTable"></div></div>
+                <p class="muted small">Expenses are saved in this browser only. Net amount is an estimate: paid invoices minus recorded expenses.</p>
+            </section>
+
+            <!-- ACTIVITY -->
+            <section id="activity" class="page"><div class="page-heading"><div><h1>Activity Log</h1><p class="muted">Recent actions recorded by this browser.</p></div><button class="secondary" onclick="clearActivity()">Clear local log</button></div><div class="panel"><div class="table-wrap" id="activityTable"></div></div><p class="muted small">Activity log is browser-local and is not a tamper-proof audit trail.</p></section>
+
+            <!-- SETTINGS -->
+            <section id="settings" class="page"><div class="page-heading"><div><h1>Settings</h1><p class="muted">Local invoice display preferences.</p></div></div><div class="panel"><div class="form-grid"><div><label>Business name</label><input id="settingBusiness" value="XLANTIS CUSTOMS"></div><div><label>Business subtitle</label><input id="settingSubtitle" value="VEHICLE DEVELOPMENT & CUSTOMIZATION"></div><div><label>UPI ID (display/reference only)</label><input id="settingUpi" placeholder="yourname@upi"></div><div><label>Currency</label><select id="settingCurrency"><option value="INR">INR — Indian Rupee</option></select></div></div><button class="primary" style="margin-top:16px" onclick="saveSettings()">Save Settings</button><div id="settingsMessage" class="muted small" style="margin-top:12px"></div></div><p class="muted small">Settings are saved in this browser. UPI ID is not used to verify payments.</p></section>
+
             <!-- BACKGROUNDS -->
             <section id="backgrounds" class="page">
                 <h1>Saved Backgrounds</h1>
@@ -324,11 +351,16 @@ let temporaryBackground = null;
 let savedBackgroundPath = null;
 let invoiceItems = [];
 let editingInvoiceId = null;
+let serviceCatalog = JSON.parse(localStorage.getItem("xlc_services") || "[]");
+let expenseRecords = JSON.parse(localStorage.getItem("xlc_expenses") || "[]");
+let activityRecords = JSON.parse(localStorage.getItem("xlc_activity") || "[]");
 
 // Public dashboard: no sign-in screen. Access is controlled by the
 // public Supabase policies installed with the companion SQL script.
 async function openApplication() {
     document.getElementById("invoiceDate").value = new Date().toISOString().slice(0,10);
+    document.getElementById("expenseDate").value = new Date().toISOString().slice(0,10);
+    loadSettings();
     const reportMonth = document.getElementById("reportMonth");
     if (reportMonth) reportMonth.value = new Date().toISOString().slice(0,7);
     await loadInvoices();
@@ -351,6 +383,10 @@ function showPage(page, button) {
     if (page === "payments") renderPayments();
     if (page === "reports") renderReports();
     if (page === "backgrounds") renderBackgrounds();
+    if (page === "services") renderServices();
+    if (page === "expenses") renderExpenses();
+    if (page === "activity") renderActivity();
+    if (page === "settings") loadSettings();
 }
 
 // ==========================================
@@ -719,6 +755,7 @@ async function createInvoice() {
         document.querySelector('#create h1').textContent = 'Create Invoice';
         document.querySelector('#create .primary').textContent = 'Save Invoice & Download PNG';
         await loadInvoices();
+        logActivity(wasEditing ? "Invoice edited" : "Invoice created", savedInvoice.invoice_number);
         message.textContent = `Invoice ${savedInvoice.invoice_number} ${wasEditing ? 'updated' : 'created'} successfully.`;
 
     } catch (error) {
@@ -1017,6 +1054,7 @@ async function cancelInvoice(id) {
     if (!confirm(`Cancel invoice ${invoice.invoice_number}? It will remain in history.`)) return;
     const { error } = await db.from("invoices").update({ payment_status: "Cancelled" }).eq("id", id);
     if (error) return alert("Unable to cancel invoice: " + error.message);
+    logActivity("Invoice cancelled", invoice.invoice_number);
     await loadInvoices();
 }
 
@@ -1063,6 +1101,46 @@ async function markPaid(id) {
 
     await loadInvoices();
 }
+
+// ==========================================
+// LOCAL BUSINESS TOOLS: SERVICES, EXPENSES, SETTINGS, ACTIVITY
+// ==========================================
+function saveLocal(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+function logActivity(action, detail) {
+    activityRecords.unshift({ action, detail, at: new Date().toLocaleString() });
+    activityRecords = activityRecords.slice(0, 200); saveLocal("xlc_activity", activityRecords);
+}
+function saveService() {
+    const name = document.getElementById("serviceName").value.trim();
+    const price = Number(document.getElementById("servicePrice").value);
+    if (!name || !Number.isFinite(price) || price < 0) return alert("Enter a service name and valid price.");
+    serviceCatalog.push({ id: Date.now(), name, price }); saveLocal("xlc_services", serviceCatalog);
+    document.getElementById("serviceName").value = ""; document.getElementById("servicePrice").value = "";
+    logActivity("Service added", name); renderServices();
+}
+function renderServices() {
+    const el = document.getElementById("servicesTable"); if (!el) return;
+    el.innerHTML = serviceCatalog.length ? `<table><thead><tr><th>Service</th><th>Default price</th><th>Action</th></tr></thead><tbody>${serviceCatalog.map(x=>`<tr><td>${escapeHTML(x.name)}</td><td>${money(x.price)}</td><td><button class="secondary" onclick="useService(${x.id})">Use in invoice</button> <button class="danger" onclick="deleteService(${x.id})">Delete</button></td></tr>`).join("")}</tbody></table>` : '<p class="muted">No services added yet.</p>';
+}
+function useService(id) { const x=serviceCatalog.find(s=>s.id===id); if(!x)return; showPage("create",document.querySelector('[data-page="create"]')); addItem(x.name,1,x.price); }
+function deleteService(id) { const x=serviceCatalog.find(s=>s.id===id); if(!x||!confirm(`Delete service ${x.name}?`))return; serviceCatalog=serviceCatalog.filter(s=>s.id!==id); saveLocal("xlc_services",serviceCatalog); logActivity("Service deleted",x.name); renderServices(); }
+function addExpense() {
+    const description=document.getElementById("expenseDescription").value.trim(), amount=Number(document.getElementById("expenseAmount").value), date=document.getElementById("expenseDate").value, category=document.getElementById("expenseCategory").value;
+    if(!description||!Number.isFinite(amount)||amount<=0||!date)return alert("Enter an expense description, valid amount and date.");
+    expenseRecords.unshift({id:Date.now(),description,amount,date,category}); saveLocal("xlc_expenses",expenseRecords); logActivity("Expense added",`${description} — ${money(amount)}`);
+    document.getElementById("expenseDescription").value="";document.getElementById("expenseAmount").value="";renderExpenses();
+}
+function renderExpenses() {
+    const el=document.getElementById("expensesTable"); if(!el)return;
+    const total=expenseRecords.reduce((s,x)=>s+Number(x.amount),0), revenue=invoices.filter(x=>x.payment_status==="Paid").reduce((s,x)=>s+Number(x.total||0),0);
+    document.getElementById("expenseTotal").textContent=money(total);document.getElementById("expenseRevenue").textContent=money(revenue);document.getElementById("expenseNet").textContent=money(revenue-total);
+    el.innerHTML=expenseRecords.length?`<table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th>Action</th></tr></thead><tbody>${expenseRecords.map(x=>`<tr><td>${escapeHTML(x.date)}</td><td>${escapeHTML(x.description)}</td><td>${escapeHTML(x.category)}</td><td>${money(x.amount)}</td><td><button class="danger" onclick="deleteExpense(${x.id})">Delete</button></td></tr>`).join("")}</tbody></table>`:'<p class="muted">No expenses recorded.</p>';
+}
+function deleteExpense(id) { const x=expenseRecords.find(e=>e.id===id); if(!x||!confirm("Delete this expense record?"))return; expenseRecords=expenseRecords.filter(e=>e.id!==id);saveLocal("xlc_expenses",expenseRecords);logActivity("Expense deleted",x.description);renderExpenses(); }
+function loadSettings() { const x=JSON.parse(localStorage.getItem("xlc_settings")||"{}"); ["Business","Subtitle","Upi","Currency"].forEach(k=>{const el=document.getElementById("setting"+k);if(el&&x[k.toLowerCase()]!==undefined)el.value=x[k.toLowerCase()];}); }
+function saveSettings() { const x={business:document.getElementById("settingBusiness").value.trim(),subtitle:document.getElementById("settingSubtitle").value.trim(),upi:document.getElementById("settingUpi").value.trim(),currency:document.getElementById("settingCurrency").value}; if(!x.business)return alert("Business name is required.");saveLocal("xlc_settings",x);logActivity("Settings updated","Invoice display preferences saved");document.getElementById("settingsMessage").textContent="Settings saved in this browser."; }
+function renderActivity() { const el=document.getElementById("activityTable");if(!el)return;el.innerHTML=activityRecords.length?`<table><thead><tr><th>Time</th><th>Action</th><th>Details</th></tr></thead><tbody>${activityRecords.map(x=>`<tr><td>${escapeHTML(x.at)}</td><td>${escapeHTML(x.action)}</td><td>${escapeHTML(x.detail)}</td></tr>`).join("")}</tbody></table>`:'<p class="muted">No local activity recorded yet.</p>'; }
+function clearActivity() { if(!confirm("Clear this browser's activity log?"))return;activityRecords=[];saveLocal("xlc_activity",activityRecords);renderActivity(); }
 
 // ==========================================
 // RESET FORM

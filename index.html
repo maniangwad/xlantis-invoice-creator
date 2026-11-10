@@ -87,6 +87,7 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
             <button class="nav active" data-page="dashboard" onclick="showPage('dashboard',this)">▦ <span>Dashboard</span></button>
             <button class="nav" data-page="history" onclick="showPage('history',this)">▤ <span>Invoices</span></button>
             <button class="nav" data-page="clients" onclick="showPage('clients',this)">♙ <span>Clients</span></button>
+            <button class="nav" data-page="payments" onclick="showPage('payments',this)">₹ <span>Payments</span></button>
             <button class="nav" data-page="create" onclick="showPage('create',this)">＋ <span>Create Invoice</span></button>
             <div class="nav-section">Configuration</div>
             <button class="nav" data-page="backgrounds" onclick="showPage('backgrounds',this)">▧ <span>Backgrounds</span></button>
@@ -121,6 +122,31 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
                     <div class="table-wrap" id="clientsTable" style="margin-top:18px"></div>
                 </div>
                 <p class="muted small" style="margin-top:12px">Clients are grouped by email address. You can also find a client using any associated invoice number.</p>
+            </section>
+
+            <!-- PAYMENTS -->
+            <section id="payments" class="page">
+                <div class="page-heading">
+                    <div><h1>Payments</h1><p class="muted">Track invoice collections and outstanding balances.</p></div>
+                </div>
+                <div class="cards">
+                    <div class="card"><div class="metric-label">Collected</div><div class="metric" id="paymentCollected">₹0.00</div><div class="metric-meta">Invoices marked paid</div></div>
+                    <div class="card"><div class="metric-label">Outstanding</div><div class="metric" id="paymentOutstanding">₹0.00</div><div class="metric-meta">Unpaid active invoices</div></div>
+                    <div class="card"><div class="metric-label">Overdue</div><div class="metric" id="paymentOverdue">₹0.00</div><div class="metric-meta">Past due and unpaid</div></div>
+                </div>
+                <div class="panel">
+                    <div class="row between" style="margin-bottom:12px">
+                        <input id="paymentSearch" class="search-box" placeholder="Search invoice number or email..." oninput="renderPayments()">
+                        <select id="paymentStatusFilter" style="max-width:170px;margin:0" onchange="renderPayments()">
+                            <option value="All">All statuses</option><option value="Paid">Paid</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option><option value="Cancelled">Cancelled</option>
+                        </select>
+                        <select id="paymentMethodFilter" style="max-width:170px;margin:0" onchange="renderPayments()">
+                            <option value="All">All methods</option><option value="UPI">UPI</option><option value="Bank Transfer">Bank Transfer</option><option value="Cash">Cash</option><option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="table-wrap" id="paymentsTable"></div>
+                    <p class="muted small" style="margin-top:12px">Payment tracking currently records full invoice status (Paid or Pending). Partial payments are not recorded separately.</p>
+                </div>
             </section>
 
             <!-- CREATE INVOICE -->
@@ -290,6 +316,7 @@ function showPage(page, button) {
 
     if (page === "history") renderHistory();
     if (page === "clients") renderClients();
+    if (page === "payments") renderPayments();
     if (page === "backgrounds") renderBackgrounds();
 }
 
@@ -720,9 +747,41 @@ async function loadInvoices() {
     invoices = data || [];
     renderHistory();
     renderClients();
+    renderPayments();
     updateDashboard();
 }
 
+
+function renderPayments() {
+    const table = document.getElementById("paymentsTable");
+    if (!table) return;
+    const today = new Date();
+    const active = invoices.filter(x => x.payment_status !== "Cancelled");
+    const collected = active.filter(x => x.payment_status === "Paid").reduce((sum,x) => sum + Number(x.total || 0), 0);
+    const outstanding = active.filter(x => x.payment_status !== "Paid").reduce((sum,x) => sum + Number(x.total || 0), 0);
+    const overdue = active.filter(x => x.payment_status !== "Paid" && x.due_date && new Date(x.due_date + "T23:59:59") < today).reduce((sum,x) => sum + Number(x.total || 0), 0);
+    document.getElementById("paymentCollected").textContent = money(collected);
+    document.getElementById("paymentOutstanding").textContent = money(outstanding);
+    document.getElementById("paymentOverdue").textContent = money(overdue);
+
+    const search = (document.getElementById("paymentSearch")?.value || "").trim().toLowerCase();
+    const statusFilter = document.getElementById("paymentStatusFilter")?.value || "All";
+    const methodFilter = document.getElementById("paymentMethodFilter")?.value || "All";
+    const filtered = invoices.filter(invoice => {
+        const status = getInvoiceDisplayStatus(invoice);
+        const matchesSearch = String(invoice.invoice_number || "").toLowerCase().includes(search) || String(invoice.customer_email || "").toLowerCase().includes(search);
+        return matchesSearch && (statusFilter === "All" || status === statusFilter) && (methodFilter === "All" || (invoice.payment_method || "Other") === methodFilter);
+    });
+    if (!filtered.length) {
+        table.innerHTML = '<p class="muted" style="padding:12px">No matching payment records.</p>';
+        return;
+    }
+    table.innerHTML = `<table><thead><tr><th>Invoice</th><th>Email</th><th>Due date</th><th>Method</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>${filtered.map(invoice => {
+        const status = getInvoiceDisplayStatus(invoice);
+        const action = status !== "Paid" && status !== "Cancelled" ? `<button class="secondary" onclick="markPaid('${invoice.id}')">Mark paid</button>` : "—";
+        return `<tr><td>${escapeHTML(invoice.invoice_number || "—")}</td><td>${escapeHTML(invoice.customer_email || "—")}</td><td>${escapeHTML(invoice.due_date || "—")}</td><td>${escapeHTML(invoice.payment_method || "—")}</td><td>${money(invoice.total)}</td><td><span class="status ${status.toLowerCase()}">${status}</span></td><td>${action}</td></tr>`;
+    }).join("")}</tbody></table>`;
+}
 
 function getClientRecords() {
     const records = new Map();

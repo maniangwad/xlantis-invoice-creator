@@ -115,12 +115,8 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
                 <p class="muted">Create a new XLANTIS CUSTOMS invoice.</p>
 
                 <div class="panel">
-                    <h2>Customer details</h2>
+                    <h2>Contact and vehicle details</h2>
                     <div class="form-grid">
-                        <div>
-                            <label>Customer name *</label>
-                            <input id="customerName" placeholder="Customer name">
-                        </div>
                         <div>
                             <label>Customer phone</label>
                             <input id="customerPhone" placeholder="Phone number">
@@ -132,10 +128,6 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
                         <div>
                             <label>Vehicle name</label>
                             <input id="vehicleName" placeholder="Vehicle name">
-                        </div>
-                        <div>
-                            <label>Vehicle number / plate</label>
-                            <input id="vehicleNumber" placeholder="Vehicle number">
                         </div>
                         <div>
                             <label>Invoice date</label>
@@ -211,7 +203,7 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
                 <p class="muted">Search and manage saved invoices.</p>
                 <div class="panel">
                     <div class="row between" style="margin-bottom:12px">
-                        <input id="historySearch" class="search-box" placeholder="Search invoice or customer..." oninput="renderHistory()">
+                        <input id="historySearch" class="search-box" placeholder="Search invoice number or vehicle..." oninput="renderHistory()">
                         <select id="historyStatus" style="max-width:190px;margin:0" onchange="renderHistory()">
                             <option value="All">All statuses</option>
                             <option value="Paid">Paid</option>
@@ -560,13 +552,6 @@ async function createInvoice() {
     const message = document.getElementById("message");
     message.textContent = "";
 
-    const customerName = document.getElementById("customerName").value.trim();
-
-    if (!customerName) {
-        message.textContent = "Customer name is required.";
-        return;
-    }
-
     if (!invoiceItems.length || invoiceItems.some(
         item => !item.description.trim() ||
         Number(item.quantity) <= 0 ||
@@ -610,11 +595,9 @@ async function createInvoice() {
 
         const invoice = {
             invoice_number: invoiceNumber,
-            customer_name: customerName,
             customer_email: document.getElementById("customerEmail").value.trim() || null,
             customer_phone: document.getElementById("customerPhone").value.trim() || null,
             vehicle_name: document.getElementById("vehicleName").value.trim() || null,
-            vehicle_number: document.getElementById("vehicleNumber").value.trim() || null,
             invoice_date: document.getElementById("invoiceDate").value || null,
             due_date: document.getElementById("dueDate").value || null,
             payment_method: document.getElementById("paymentMethod").value,
@@ -684,8 +667,8 @@ async function generatePNG(invoice, items, backgroundData) {
         <div style="position:relative;z-index:1">
           <div style="background:#105cb4;color:white;margin:-70px -72px 55px;padding:38px 72px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:36px;font-weight:900">XLANTIS CUSTOMS</div><div style="font-size:16px;margin-top:8px">VEHICLE DEVELOPMENT &amp; CUSTOMIZATION</div></div><div style="font-size:28px;font-weight:bold">INVOICE</div></div>
           <div style="font-size:18px;line-height:1.9">Invoice: ${safe(invoice.invoice_number)}<br>Date: ${safe(invoice.invoice_date)}<br>Due: ${safe(invoice.due_date)}</div>
-          <h3 style="margin:42px 0 12px;color:#105cb4">BILL TO</h3>
-          <div style="font-size:18px;line-height:1.8">${safe(invoice.customer_name)}<br>Phone: ${safe(invoice.customer_phone)}<br>Email: ${safe(invoice.customer_email)}<br>Vehicle: ${safe(invoice.vehicle_name)}<br>Vehicle No: ${safe(invoice.vehicle_number)}</div>
+          <h3 style="margin:42px 0 12px;color:#105cb4">SERVICE DETAILS</h3>
+          <div style="font-size:18px;line-height:1.8">${invoice.customer_phone ? `Phone: ${safe(invoice.customer_phone)}<br>` : ""}${invoice.customer_email ? `Email: ${safe(invoice.customer_email)}<br>` : ""}${invoice.vehicle_name ? `Vehicle: ${safe(invoice.vehicle_name)}` : ""}</div>
           <table style="width:100%;border-collapse:collapse;margin-top:45px;font-size:17px"><thead><tr style="background:#105cb4;color:#fff"><th style="padding:16px;text-align:left">DESCRIPTION</th><th style="padding:16px">QTY</th><th style="padding:16px">PRICE</th><th style="padding:16px">TOTAL</th></tr></thead><tbody>${itemRows}</tbody></table>
           <div style="margin:35px 0 0 auto;width:390px;font-size:18px;line-height:2;border-top:2px solid #bdcddd;padding-top:18px;text-align:right">Subtotal: ${safe(money(invoice.subtotal))}<br>Tax / Extras: ${safe(money(invoice.tax))}<br><strong style="font-size:26px;color:#105cb4">TOTAL: ${safe(money(invoice.total))}</strong></div>
           <div style="margin-top:35px;font-size:18px;line-height:1.9">Payment method: ${safe(invoice.payment_method || "UPI")}<br>Payment status: ${safe(invoice.payment_status)}</div>
@@ -736,13 +719,13 @@ function renderHistory() {
     const statusFilter = document.getElementById("historyStatus")?.value || "All";
     const filtered = invoices.filter(invoice => {
         const matchesSearch = String(invoice.invoice_number || "").toLowerCase().includes(search) ||
-            String(invoice.customer_name || "").toLowerCase().includes(search);
+            String(invoice.vehicle_name || "").toLowerCase().includes(search);
         const matchesStatus = statusFilter === "All" || getInvoiceDisplayStatus(invoice) === statusFilter;
         return matchesSearch && matchesStatus;
     });
 
     const html = `<table><thead><tr>
-        <th>Invoice</th><th>Customer</th><th>Date</th><th>Total</th><th>Status</th><th>Actions</th>
+        <th>Invoice</th><th>Vehicle</th><th>Date</th><th>Total</th><th>Status</th><th>Actions</th>
     </tr></thead><tbody>${filtered.map(invoice => {
         const status = getInvoiceDisplayStatus(invoice);
         const actions = [
@@ -754,7 +737,7 @@ function renderHistory() {
         if (status !== "Cancelled") actions.push(`<button class="danger" onclick="cancelInvoice('${invoice.id}')">Cancel</button>`);
         return `<tr>
             <td>${escapeHTML(invoice.invoice_number)}</td>
-            <td>${escapeHTML(invoice.customer_name)}</td>
+            <td>${escapeHTML(invoice.vehicle_name || "—")}</td>
             <td>${escapeHTML(invoice.invoice_date || "—")}</td>
             <td>${money(invoice.total)}</td>
             <td><span class="status ${status.toLowerCase()}">${status}</span></td>
@@ -780,7 +763,7 @@ async function viewInvoice(id) {
     try {
         const items = await getInvoiceItems(id);
         const lines = items.map(x => `${x.description} — ${x.quantity} × ${money(x.price)} = ${money(x.quantity*x.price)}`).join("\n");
-        alert(`Invoice: ${invoice.invoice_number}\nCustomer: ${invoice.customer_name}\nVehicle: ${invoice.vehicle_name || "—"}\nDate: ${invoice.invoice_date || "—"}\nDue: ${invoice.due_date || "—"}\nStatus: ${getInvoiceDisplayStatus(invoice)}\n\n${lines}\n\nSubtotal: ${money(invoice.subtotal)}\nTax / Extras: ${money(invoice.tax)}\nTotal: ${money(invoice.total)}\nPayment: ${invoice.payment_method || "—"}\nNotes: ${invoice.notes || "—"}`);
+        alert(`Invoice: ${invoice.invoice_number}\nVehicle: ${invoice.vehicle_name || "—"}\nDate: ${invoice.invoice_date || "—"}\nDue: ${invoice.due_date || "—"}\nStatus: ${getInvoiceDisplayStatus(invoice)}\n\n${lines}\n\nSubtotal: ${money(invoice.subtotal)}\nTax / Extras: ${money(invoice.tax)}\nTotal: ${money(invoice.total)}\nPayment: ${invoice.payment_method || "—"}\nNotes: ${invoice.notes || "—"}`);
     } catch (error) { alert("Unable to load invoice details: " + error.message); }
 }
 
@@ -791,9 +774,9 @@ async function editInvoice(id) {
         const items = await getInvoiceItems(id);
         editingInvoiceId = id;
         const values = {
-            customerName: invoice.customer_name, customerPhone: invoice.customer_phone || "",
+            customerPhone: invoice.customer_phone || "",
             customerEmail: invoice.customer_email || "", vehicleName: invoice.vehicle_name || "",
-            vehicleNumber: invoice.vehicle_number || "", invoiceDate: invoice.invoice_date || "",
+            invoiceDate: invoice.invoice_date || "",
             dueDate: invoice.due_date || "", paymentMethod: invoice.payment_method || "UPI",
             tax: Number(invoice.tax || 0), invoiceNotes: invoice.notes || ""
         };
@@ -852,12 +835,12 @@ function updateDashboard() {
 
     const recent = invoices.slice(0,5);
     document.getElementById("recentInvoices").innerHTML = recent.length
-        ? `<table><thead><tr><th>Client Name</th><th>Invoice Number</th><th>Amount</th><th>Status</th><th>Due Date</th></tr></thead><tbody>
+        ? `<table><thead><tr><th>Vehicle</th><th>Invoice Number</th><th>Amount</th><th>Status</th><th>Due Date</th></tr></thead><tbody>
             ${recent.map(x => {
                 const isOverdue = x.payment_status !== "Paid" && x.payment_status !== "Cancelled" && x.due_date && new Date(x.due_date + "T23:59:59") < today;
                 const status = x.payment_status === "Paid" ? "Paid" : x.payment_status === "Cancelled" ? "Cancelled" : isOverdue ? "Overdue" : "Pending";
                 const statusClass = status.toLowerCase();
-                return `<tr><td>${escapeHTML(x.customer_name)}</td><td>${escapeHTML(x.invoice_number)}</td><td>${money(x.total)}</td><td><span class="status ${statusClass}">${status}</span></td><td>${escapeHTML(x.due_date || "—")}</td></tr>`;
+                return `<tr><td>${escapeHTML(x.vehicle_name || "—")}</td><td>${escapeHTML(x.invoice_number)}</td><td>${money(x.total)}</td><td><span class="status ${statusClass}">${status}</span></td><td>${escapeHTML(x.due_date || "—")}</td></tr>`;
             }).join("")}
            </tbody></table>`
         : '<p class="muted">No invoices created yet.</p>';
@@ -891,8 +874,8 @@ function resetForm() {
     document.querySelector('#create .primary').textContent = 'Save Invoice & Download PNG';
 
     [
-        "customerName","customerPhone","customerEmail",
-        "vehicleName","vehicleNumber","dueDate",
+        "customerPhone","customerEmail",
+        "vehicleName","dueDate",
         "invoiceNotes","backgroundFile"
     ].forEach(id => document.getElementById(id).value = "");
 

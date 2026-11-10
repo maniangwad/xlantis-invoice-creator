@@ -88,6 +88,7 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
             <button class="nav" data-page="history" onclick="showPage('history',this)">▤ <span>Invoices</span></button>
             <button class="nav" data-page="clients" onclick="showPage('clients',this)">♙ <span>Clients</span></button>
             <button class="nav" data-page="payments" onclick="showPage('payments',this)">₹ <span>Payments</span></button>
+            <button class="nav" data-page="reports" onclick="showPage('reports',this)">▥ <span>Reports</span></button>
             <button class="nav" data-page="create" onclick="showPage('create',this)">＋ <span>Create Invoice</span></button>
             <div class="nav-section">Configuration</div>
             <button class="nav" data-page="backgrounds" onclick="showPage('backgrounds',this)">▧ <span>Backgrounds</span></button>
@@ -147,6 +148,35 @@ table {width:100%;border-collapse:collapse;min-width:720px}th,td {padding:14px 1
                     <div class="table-wrap" id="paymentsTable"></div>
                     <p class="muted small" style="margin-top:12px">Payment tracking currently records full invoice status (Paid or Pending). Partial payments are not recorded separately.</p>
                 </div>
+            </section>
+
+            <!-- REPORTS -->
+            <section id="reports" class="page">
+                <div class="page-heading">
+                    <div><h1>Reports</h1><p class="muted">Invoice and payment performance based on your saved records.</p></div>
+                    <button class="primary" onclick="exportReportsCSV()">↓ Export CSV</button>
+                </div>
+                <div class="row between" style="margin-bottom:16px">
+                    <label style="margin:0;min-width:220px">Report month
+                        <input id="reportMonth" type="month" style="margin-top:7px" onchange="renderReports()">
+                    </label>
+                    <span class="muted small">Cancelled invoices are excluded from financial totals.</span>
+                </div>
+                <div class="cards">
+                    <div class="card"><div class="metric-label">Invoices Created</div><div class="metric" id="reportInvoiceCount">0</div></div>
+                    <div class="card"><div class="metric-label">Billed Amount</div><div class="metric" id="reportBilled">₹0.00</div></div>
+                    <div class="card"><div class="metric-label">Collected</div><div class="metric" id="reportCollected">₹0.00</div></div>
+                    <div class="card"><div class="metric-label">Outstanding</div><div class="metric" id="reportOutstanding">₹0.00</div></div>
+                </div>
+                <div class="panel" style="margin-bottom:18px">
+                    <h2>Payment breakdown</h2>
+                    <div class="table-wrap" id="reportBreakdown"></div>
+                </div>
+                <div class="panel">
+                    <h2>Monthly invoice details</h2>
+                    <div class="table-wrap" id="reportInvoices"></div>
+                </div>
+                <p class="muted small" style="margin-top:12px">This report shows billed and collected amounts, not business profit. Cost/expense data is not currently recorded.</p>
             </section>
 
             <!-- CREATE INVOICE -->
@@ -299,6 +329,8 @@ let editingInvoiceId = null;
 // public Supabase policies installed with the companion SQL script.
 async function openApplication() {
     document.getElementById("invoiceDate").value = new Date().toISOString().slice(0,10);
+    const reportMonth = document.getElementById("reportMonth");
+    if (reportMonth) reportMonth.value = new Date().toISOString().slice(0,7);
     await loadInvoices();
     await loadBackgrounds();
 }
@@ -317,6 +349,7 @@ function showPage(page, button) {
     if (page === "history") renderHistory();
     if (page === "clients") renderClients();
     if (page === "payments") renderPayments();
+    if (page === "reports") renderReports();
     if (page === "backgrounds") renderBackgrounds();
 }
 
@@ -748,6 +781,7 @@ async function loadInvoices() {
     renderHistory();
     renderClients();
     renderPayments();
+    renderReports();
     updateDashboard();
 }
 
@@ -781,6 +815,55 @@ function renderPayments() {
         const action = status !== "Paid" && status !== "Cancelled" ? `<button class="secondary" onclick="markPaid('${invoice.id}')">Mark paid</button>` : "—";
         return `<tr><td>${escapeHTML(invoice.invoice_number || "—")}</td><td>${escapeHTML(invoice.customer_email || "—")}</td><td>${escapeHTML(invoice.due_date || "—")}</td><td>${escapeHTML(invoice.payment_method || "—")}</td><td>${money(invoice.total)}</td><td><span class="status ${status.toLowerCase()}">${status}</span></td><td>${action}</td></tr>`;
     }).join("")}</tbody></table>`;
+}
+
+function getReportInvoices() {
+    const month = document.getElementById("reportMonth")?.value || "";
+    return invoices.filter(invoice => {
+        const date = String(invoice.invoice_date || invoice.created_at || "").slice(0, 7);
+        return !month || date === month;
+    });
+}
+
+function renderReports() {
+    const table = document.getElementById("reportInvoices");
+    if (!table) return;
+    const monthInvoices = getReportInvoices();
+    const active = monthInvoices.filter(x => x.payment_status !== "Cancelled");
+    const billed = active.reduce((sum, x) => sum + Number(x.total || 0), 0);
+    const collected = active.filter(x => x.payment_status === "Paid").reduce((sum, x) => sum + Number(x.total || 0), 0);
+    const outstanding = billed - collected;
+    document.getElementById("reportInvoiceCount").textContent = monthInvoices.length;
+    document.getElementById("reportBilled").textContent = money(billed);
+    document.getElementById("reportCollected").textContent = money(collected);
+    document.getElementById("reportOutstanding").textContent = money(outstanding);
+
+    const counts = { Paid: 0, Pending: 0, Overdue: 0, Cancelled: 0 };
+    const amounts = { Paid: 0, Pending: 0, Overdue: 0, Cancelled: 0 };
+    monthInvoices.forEach(invoice => {
+        const status = getInvoiceDisplayStatus(invoice);
+        counts[status] = (counts[status] || 0) + 1;
+        amounts[status] = (amounts[status] || 0) + Number(invoice.total || 0);
+    });
+    document.getElementById("reportBreakdown").innerHTML = `<table><thead><tr><th>Status</th><th>Invoices</th><th>Amount</th></tr></thead><tbody>${Object.keys(counts).map(status => `<tr><td>${status}</td><td>${counts[status]}</td><td>${money(amounts[status])}</td></tr>`).join("")}</tbody></table>`;
+
+    const sorted = [...monthInvoices].sort((a,b) => String(b.invoice_date || b.created_at || "").localeCompare(String(a.invoice_date || a.created_at || "")));
+    table.innerHTML = sorted.length ? `<table><thead><tr><th>Invoice</th><th>Email</th><th>Date</th><th>Method</th><th>Amount</th><th>Status</th></tr></thead><tbody>${sorted.map(invoice => `<tr><td>${escapeHTML(invoice.invoice_number || "—")}</td><td>${escapeHTML(invoice.customer_email || "—")}</td><td>${escapeHTML(invoice.invoice_date || "—")}</td><td>${escapeHTML(invoice.payment_method || "—")}</td><td>${money(invoice.total)}</td><td>${getInvoiceDisplayStatus(invoice)}</td></tr>`).join("")}</tbody></table>` : '<p class="muted" style="padding:12px">No invoices found for this month.</p>';
+}
+
+function exportReportsCSV() {
+    const rows = getReportInvoices();
+    if (!rows.length) return alert("There are no invoices to export for this month.");
+    const columns = ["invoice_number", "invoice_date", "due_date", "customer_email", "vehicle_name", "payment_method", "payment_status", "subtotal", "tax", "total"];
+    const csvCell = value => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const csv = [columns.join(","), ...rows.map(row => columns.map(column => csvCell(row[column])).join(","))].join("\r\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `xlantis-invoice-report-${document.getElementById("reportMonth")?.value || "all"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
 }
 
 function getClientRecords() {

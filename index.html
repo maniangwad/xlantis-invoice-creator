@@ -769,6 +769,8 @@ async function createInvoice() {
 // ==========================================
 async function generatePNG(invoice, items, backgroundData) {
     const opacity = Number(document.getElementById("backgroundOpacity").value) / 100;
+    const invoiceSettings = JSON.parse(localStorage.getItem("xlc_settings") || "{}");
+    const upiId = String(invoiceSettings.upi || "").trim();
     const wrap = document.createElement("div");
     wrap.style.cssText = "position:fixed;left:-10000px;top:0;width:1000px;background:#fff;color:#1e2d41;font-family:Arial,sans-serif;padding:0;z-index:-1";
     const safe = value => escapeHTML(String(value ?? "-"));
@@ -783,7 +785,7 @@ async function generatePNG(invoice, items, backgroundData) {
           <div style="font-size:18px;line-height:1.8">${invoice.customer_name ? `Customer: ${safe(invoice.customer_name)}<br>` : ""}${invoice.customer_email ? `Email: ${safe(invoice.customer_email)}<br>` : ""}${invoice.vehicle_name ? `Vehicle: ${safe(invoice.vehicle_name)}` : ""}</div>
           <table style="width:100%;border-collapse:collapse;margin-top:45px;font-size:17px"><thead><tr style="background:#105cb4;color:#fff"><th style="padding:16px;text-align:left">DESCRIPTION</th><th style="padding:16px">QTY</th><th style="padding:16px">PRICE</th><th style="padding:16px">TOTAL</th></tr></thead><tbody>${itemRows}</tbody></table>
           <div style="margin:35px 0 0 auto;width:390px;font-size:18px;line-height:2;border-top:2px solid #bdcddd;padding-top:18px;text-align:right">Subtotal: ${safe(money(invoice.subtotal))}<br>Tax / Extras: ${safe(money(invoice.tax))}<br><strong style="font-size:26px;color:#105cb4">TOTAL: ${safe(money(invoice.total))}</strong></div>
-          <div style="margin-top:35px;font-size:18px;line-height:1.9">Payment method: ${safe(invoice.payment_method || "UPI")}<br>Payment status: ${safe(invoice.payment_status)}</div>
+          <div style="margin-top:35px;font-size:18px;line-height:1.9">Payment method: ${safe(invoice.payment_method || "UPI")}<br>${upiId ? `UPI ID: ${safe(upiId)}<br>` : ""}Payment status: ${safe(invoice.payment_status)}</div>
           ${invoice.notes ? `<div style="margin-top:28px;font-size:17px;white-space:pre-wrap"><strong>Notes:</strong><br>${safe(invoice.notes)}</div>` : ""}
           <div style="text-align:center;margin-top:65px;color:#647382">Thank you for choosing XLANTIS CUSTOMS.</div>
         </div>
